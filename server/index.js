@@ -340,7 +340,9 @@ app.get('/api/stats', auth, (req, res) => {
 });
 
 // ─── Serve built frontend (single-container/Docker deploy) ─────
-const PUBLIC_DIR = path.join(__dirname, 'public');
+const PUBLIC_DIR = fs.existsSync(path.join(__dirname, 'public'))
+  ? path.join(__dirname, 'public')
+  : path.join(__dirname, '..', 'dist');
 if (fs.existsSync(PUBLIC_DIR)) {
   app.use(express.static(PUBLIC_DIR));
   // SPA fallback — non-API routes return index.html
