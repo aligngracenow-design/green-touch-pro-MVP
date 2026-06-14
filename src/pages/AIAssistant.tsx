@@ -24,10 +24,13 @@ export default function AIAssistant() {
 
   async function ask(q: string) {
     if (!q.trim() || loading) return;
+    const history = messages
+      .filter((m) => m.role === 'user' || m.role === 'ai')
+      .map((m) => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text }));
     setMessages((m) => [...m, { role: 'user', text: q }]);
     setInput('');
     setLoading(true);
-    const { answer } = await api.askAi(q);
+    const { answer } = await api.askAi(q, undefined, history);
     setMessages((m) => [...m, { role: 'ai', text: answer }]);
     setLoading(false);
   }

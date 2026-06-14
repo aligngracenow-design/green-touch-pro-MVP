@@ -17,7 +17,7 @@ Built as a **full-stack, production-ready product**: React + TypeScript frontend
 | **Project Detail** | Tasks (add/check/delete), daily logs, subcontractors, documents, timeline |
 | **Leads / CRM** | Pipeline with hot/warm/new statuses, contact info, inline status updates |
 | **Invoicing** | Create, send, and mark-paid invoices; collections tracking |
-| **AI Assistant** | Ask about risks, budgets, schedule, and pipeline — instant insights |
+| **AI Assistant** | Ask about risks, budgets, schedule, and pipeline — real LLM-powered insights with live project context |
 | **Communications** | Broadcast to Telegram, Email, Slack, SMS & Teams simultaneously |
 | **Settings** | User management, backend status, live database record counts |
 
@@ -72,6 +72,37 @@ VITE_API_URL=https://your-backend.onrender.com/api
 ```bash
 npm run build     # outputs static site to dist/
 ```
+
+---
+
+## 🤖 AI Assistant (LLM Setup)
+
+The AI assistant is **provider-agnostic** — it uses any OpenAI-compatible Chat Completions API. With no key set, it runs a built-in rule-based responder (demo mode) so it always works.
+
+To enable a real LLM, set these in `server/.env`:
+
+```bash
+# OpenAI
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=sk-...
+LLM_MODEL=gpt-4o-mini
+
+# or OpenRouter (access to Claude, GPT, Llama, etc.)
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=sk-or-...
+LLM_MODEL=anthropic/claude-3.5-sonnet
+
+# or Groq (fast, generous free tier)
+LLM_BASE_URL=https://api.groq.com/openai/v1
+LLM_API_KEY=gsk_...
+LLM_MODEL=llama-3.3-70b-versatile
+
+# or local Ollama (free, no key)
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_MODEL=llama3.2:3b
+```
+
+The assistant automatically injects **live project context** (budgets, progress, logs, leads, invoices) into every query, so answers are grounded in real data. Conversation history is preserved for multi-turn chats.
 
 ---
 

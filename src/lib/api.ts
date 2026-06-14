@@ -217,14 +217,14 @@ export const api = {
   },
 
   // ─── AI ───
-  async askAi(question: string, projectId?: string): Promise<{ answer: string }> {
+  async askAi(question: string, projectId?: string, history?: { role: string; content: string }[]): Promise<{ answer: string; provider?: string }> {
     if (MOCK_MODE) {
       await delay(600);
-      return { answer: mockAiRespond(question) };
+      return { answer: mockAiRespond(question), provider: 'Green Touch AI (demo)' };
     }
-    return request<{ answer: string }>('/ai/ask', {
+    return request<{ answer: string; provider?: string }>('/ai/ask', {
       method: 'POST',
-      body: JSON.stringify({ question, project_id: projectId }),
+      body: JSON.stringify({ question, project_id: projectId, history }),
     });
   },
 

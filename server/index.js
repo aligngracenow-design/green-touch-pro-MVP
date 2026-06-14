@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { nanoid } from 'nanoid';
 import db, { initSchema, seed } from './db.js';
+import { llmEnabled, llmStatus, buildContext, llmChat, ruleBasedRespond } from './llm.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -252,28 +253,35 @@ app.post('/api/invoices/:id/pay', auth, (req, res) => {
   res.json({ ...db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id), txn_id: txnId });
 });
 
-// ─── AI assistant (rule-based, no external key needed) ─────────
-function aiRespond(question, project) {
-  const q = (question || '').toLowerCase();
-  const ctx = project ? `For ${project.name} (${project.phase}, ${project.progress}% complete, $${project.spent.toLocaleString()}/$${project.budget.toLocaleString()} spent): ` : '';
-  if (q.includes('budget') || q.includes('cost') || q.includes('over'))
-    return `${ctx}Budget utilization is tracking within plan. ${project ? `Remaining budget is $${(project.budget - project.spent).toLocaleString()} (${(100 - project.spent / project.budget * 100).toFixed(0)}% headroom).` : 'Across all active projects, you have healthy margin. Watch Alloy Personal Training — it is flagged for schedule review.'}`;
-  if (q.includes('risk') || q.includes('concern') || q.includes('delay'))
-    return `${ctx}Top risks: (1) Alloy Personal Training framing approval is pending with the county — submit revised plans before 6/20 to avoid a 2-week slip. (2) Long-lead items (custom bar stools, float tanks) should be ordered now. (3) Keep an eye on inspection scheduling for Black Squirrel.`;
-  if (q.includes('schedule') || q.includes('timeline') || q.includes('when'))
-    return `${ctx}Black Squirrel is on track for 7/15 completion. Pure Sweat targets 8/1. Alloy is the at-risk project — current trajectory pushes completion if framing approval slips.`;
-  if (q.includes('lead') || q.includes('sales') || q.includes('pipeline'))
-    return `You have 1 hot lead (Cyxtera — data center reno, 8,000 sqft), 2 warm (Bloom Yoga, CorePower Yoga) and 2 new. Priority follow-up: Cyxtera RFP and Wilson Dental site visit (referred by M&T Bank).`;
-  return `${ctx}Here's a summary: 3 active projects, 1 completed, 1 in preconstruction. $1.56M total budget under management. Ask me about budget, risks, schedule, or your sales pipeline for specifics.`;
-}
+// ─── AI assistant (real LLM when configured, rule-based fallback) ─────────
+app.get('/api/ai/status', auth, (req, res) => {
+  res.json(llmStatus());
+});
 
-app.post('/api/ai/ask', auth, (req, res) => {
-  const { question, project_id } = req.body || {};
+app.post('/api/ai/ask', auth, async (req, res) => {
+  const { question, project_id, history } = req.body || {};
   const project = project_id ? db.prepare('SELECT * FROM projects WHERE id = ?').get(project_id) : null;
-  const answer = aiRespond(question, project);
   const id = nanoid(8);
+  let answer;
+  let provider;
+
+  if (llmEnabled) {
+    try {
+      const context = buildContext(db, project_id);
+      answer = await llmChat(question, context, Array.isArray(history) ? history : []);
+      provider = llmStatus().provider;
+    } catch (err) {
+      console.error('LLM error, falling back to rules:', err.message);
+      answer = ruleBasedRespond(question, project);
+      provider = 'rule-based (LLM unavailable)';
+    }
+  } else {
+    answer = ruleBasedRespond(question, project);
+    provider = 'Green Touch AI';
+  }
+
   db.prepare(`INSERT INTO ai_chat (id,project_id,question,answer) VALUES (?,?,?,?)`).run(id, project_id || '', question || '', answer);
-  res.json({ id, answer, provider: 'Green Touch AI' });
+  res.json({ id, answer, provider });
 });
 
 app.get('/api/ai/history', auth, (req, res) => {
