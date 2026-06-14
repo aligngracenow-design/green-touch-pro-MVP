@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+server/node_modules/
+
+# Build output
+dist/
+server/dist/
+
+# Environment
+.env
+.env.local
+server/.env
+
+# Database
+server/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+tsconfig.tsbuildinfo

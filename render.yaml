@@ -1,0 +1,17 @@
+# Render.com blueprint — provisions the Green Touch Pro backend API.
+# Deploy: connect this repo at https://render.com and it auto-detects this file.
+services:
+  - type: web
+    name: green-touch-pro-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: PORT
+        value: "4000"
