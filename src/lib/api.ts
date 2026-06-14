@@ -233,6 +233,24 @@ export const api = {
     return request<ChatMessage[]>('/ai/history');
   },
 
+  async aiStatus(): Promise<{ enabled: boolean; provider: string; model: string | null }> {
+    if (MOCK_MODE) { await delay(50); return { enabled: false, provider: 'demo', model: null }; }
+    return request('/ai/status');
+  },
+
+  async meetingSummary(transcript: string): Promise<{ summary: string; provider: string }> {
+    if (MOCK_MODE) {
+      await delay(800);
+      const lines = transcript.split(/[.!?\n]+/).map((s) => s.trim()).filter(Boolean);
+      const actions = lines.filter((l) => /\b(need to|will|should|must|action|follow up|schedule|order|send|call|submit)\b/i.test(l));
+      return {
+        summary: `## Summary\n${lines.slice(0, 2).join('. ')}.\n\n## Decisions\nNone recorded\n\n## Action Items\n${actions.length ? actions.map((a) => `- ${a}`).join('\n') : 'None recorded'}\n\n## Risks / Follow-ups\nNone recorded`,
+        provider: 'demo',
+      };
+    }
+    return request('/ai/meeting', { method: 'POST', body: JSON.stringify({ transcript }) });
+  },
+
   // ─── Comms ───
   async notify(message: string, channels: string[], projectId?: string): Promise<void> {
     if (MOCK_MODE) {

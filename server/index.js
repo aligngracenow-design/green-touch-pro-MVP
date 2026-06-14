@@ -288,6 +288,27 @@ app.get('/api/ai/history', auth, (req, res) => {
   res.json(db.prepare('SELECT * FROM ai_chat ORDER BY created_at DESC LIMIT 30').all());
 });
 
+// Meeting transcript → structured summary + action items
+app.post('/api/ai/meeting', auth, async (req, res) => {
+  const { transcript } = req.body || {};
+  if (!transcript || !transcript.trim()) return res.status(400).json({ error: 'empty transcript' });
+
+  if (llmEnabled) {
+    try {
+      const prompt = `You are a construction project assistant. Below is a raw meeting transcript. Produce a clean, structured summary in markdown with exactly these sections:\n\n## Summary\n(2-3 sentences)\n\n## Decisions\n(bullet list; "None recorded" if none)\n\n## Action Items\n(bullet list as "- [Owner] task — due date if mentioned"; "None recorded" if none)\n\n## Risks / Follow-ups\n(bullet list; "None recorded" if none)\n\nTRANSCRIPT:\n${transcript}`;
+      const summary = await llmChat(prompt, 'You convert messy meeting transcripts into crisp, actionable construction meeting notes.', []);
+      return res.json({ summary, provider: llmStatus().provider });
+    } catch (err) {
+      console.error('Meeting LLM error:', err.message);
+    }
+  }
+  // Fallback: simple heuristic extraction
+  const lines = transcript.split(/[.!?\n]+/).map((s) => s.trim()).filter(Boolean);
+  const actions = lines.filter((l) => /\b(need to|will|should|must|action|follow up|schedule|order|send|call|submit)\b/i.test(l));
+  const summary = `## Summary\n${lines.slice(0, 2).join('. ')}.\n\n## Decisions\nNone recorded\n\n## Action Items\n${actions.length ? actions.map((a) => `- ${a}`).join('\n') : 'None recorded'}\n\n## Risks / Follow-ups\nNone recorded`;
+  res.json({ summary, provider: 'rule-based' });
+});
+
 // ─── Communications ────────────────────────────────────────────
 app.post('/api/notify', auth, (req, res) => {
   const b = req.body || {};
