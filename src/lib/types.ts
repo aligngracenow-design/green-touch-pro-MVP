@@ -83,20 +83,6 @@ export interface Project {
   todos: Todo[];
 }
 
-export interface Lead {
-  id: string;
-  name: string;
-  company: string;
-  phone: string;
-  email: string;
-  project_desc: string;
-  sqft: number;
-  status: 'hot' | 'warm' | 'new' | 'won' | 'lost';
-  date: string;
-  notes: string;
-  source: string;
-}
-
 export interface Notification {
   id: string;
   project_id: string;
@@ -117,7 +103,6 @@ export interface ChatMessage {
 export interface DashboardData {
   projects: { total: number; active: number; completed: number; planning: number };
   financial: { total_budget: number; total_spent: number; paid: number; pending: number; budget_util: number };
-  leads: { total: number; hot: number; warm: number; new: number };
   health_scores: Record<string, { score: number; budget_pct: number }>;
   stats: { notifications: number; ai_chats: number; invoices: number };
 }

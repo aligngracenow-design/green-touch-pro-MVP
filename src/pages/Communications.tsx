@@ -15,7 +15,7 @@ const CHANNELS = [
 ];
 
 const CHANNEL_COLORS: Record<string, string> = {
-  telegram: 'text-blue', email: 'text-gold', slack: 'text-green', sms: 'text-amber', teams: 'text-blue',
+  telegram: 'text-blue', email: 'text-brand', slack: 'text-green', sms: 'text-amber', teams: 'text-blue',
 };
 
 export default function Communications() {
@@ -55,7 +55,7 @@ export default function Communications() {
             {CHANNELS.map(({ key, label, icon: Icon }) => (
               <button key={key} onClick={() => toggle(key)}
                 className={cx('flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors',
-                  selected.includes(key) ? 'bg-gold/10 border-gold/40 text-gold' : 'bg-white/5 border-border text-muted hover:text-text')}>
+                  selected.includes(key) ? 'bg-brand/10 border-brand/40 text-brand' : 'bg-white/5 border-border text-muted hover:text-text')}>
                 <Icon className="w-4 h-4" />{label}
               </button>
             ))}

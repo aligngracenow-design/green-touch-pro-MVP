@@ -135,8 +135,14 @@ export function initSchema() {
 }
 
 export function seed() {
-  const count = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
-  if (count > 0) return { seeded: false };
+  // Check multiple tables to detect existing data (hermes.db from bot, etc.)
+  const tables = ['users','projects','subs','tasks','crew'];
+  for (const t of tables) {
+    try {
+      const c = db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
+      if (c > 0) return { seeded: false };
+    } catch { /* table may not exist yet */ }
+  }
 
   const ownerPw = bcrypt.hashSync('demo123', 10);
   const viewerPw = bcrypt.hashSync('demo', 10);
@@ -191,21 +197,25 @@ export function seed() {
   leads.forEach(l => insLead.run('LD-' + nanoid(6).toUpperCase(), ...l));
 
   const subTpl = [['Mega Mechanical','HVAC','mike@megamech.com'],['Premier Plumbing','Plumbing','jose@premierplumb.com'],['Elite Electric','Electrical','sarah@eliteelec.com']];
-  const insSub = db.prepare(`INSERT INTO subs (id,name,trade,phone,email,project_id,status,rate) VALUES (?,?,?,?,?,?,?,?)`);
-  ['GTB-2024-002','GTB-2024-003','GTB-2024-004'].forEach(pid => {
-    subTpl.forEach(([name, trade, email], i) => {
-      insSub.run(`SUB-${pid.slice(-3)}-${i + 1}`, `${name} (${trade})`, trade, email.split('@')[0], email, pid, 'active', 25000 + Math.floor(Math.random() * 60000));
+  try {
+    const insSub = db.prepare(`INSERT INTO subs (id,name,trade,phone,email,project_id,status,rate) VALUES (?,?,?,?,?,?,?,?)`);
+    ['GTB-2024-002','GTB-2024-003','GTB-2024-004'].forEach(pid => {
+      subTpl.forEach(([name, trade, email], i) => {
+        insSub.run(`SUB-${pid.slice(-3)}-${i + 1}`, `${name} (${trade})`, trade, email.split('@')[0], email, pid, 'active', 25000 + Math.floor(Math.random() * 60000));
+      });
     });
-  });
+  } catch { /* subs table may have different schema (hermes.db) */ }
 
-  const docs = [
-    ['GTB-2024-002','Lease Agreement — Black Squirrel'],['GTB-2024-002','Structural Drawings Set 2'],
-    ['GTB-2024-003','Permit Approval — Georgetown'],['GTB-2024-003','MEP Plans Rev C'],
-    ['GTB-2024-004','Demolition Permit (Approved)'],['GTB-2024-004','Floor Plan — Framing Layout'],
-    ['GTB-2024-005','Preconstruction Scope Draft'],
-  ];
-  const insD = db.prepare(`INSERT INTO documents (id,project_id,name,type,size) VALUES (?,?,?,?,?)`);
-  docs.forEach(([pid, name]) => insD.run('DOC-' + nanoid(6).toUpperCase(), pid, name, 'pdf', '1.2 MB'));
+  try {
+    const docs = [
+      ['GTB-2024-002','Lease Agreement — Black Squirrel'],['GTB-2024-002','Structural Drawings Set 2'],
+      ['GTB-2024-003','Permit Approval — Georgetown'],['GTB-2024-003','MEP Plans Rev C'],
+      ['GTB-2024-004','Demolition Permit (Approved)'],['GTB-2024-004','Floor Plan — Framing Layout'],
+      ['GTB-2024-005','Preconstruction Scope Draft'],
+    ];
+    const insD = db.prepare(`INSERT INTO documents (id,project_id,name,type,size) VALUES (?,?,?,?,?)`);
+    docs.forEach(([pid, name]) => insD.run('DOC-' + nanoid(6).toUpperCase(), pid, name, 'pdf', '1.2 MB'));
+  } catch { /* documents table may have different schema */ }
 
   const todos = [
     ['GTB-2024-002','Schedule final health inspection','Graham','high','open','2024-06-25'],

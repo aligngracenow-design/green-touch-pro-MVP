@@ -82,7 +82,7 @@ export default function ProjectDetail() {
       {/* Key metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div className="card"><div className="text-xs text-muted uppercase">Budget</div><div className="text-2xl font-extrabold mt-1">{fmtMoney(project.budget, true)}</div></div>
-        <div className="card"><div className="text-xs text-muted uppercase">Spent</div><div className="text-2xl font-extrabold mt-1 text-gold">{fmtMoney(project.spent, true)}</div><div className="text-xs text-muted">{project.budget_pct}% used</div></div>
+        <div className="card"><div className="text-xs text-muted uppercase">Spent</div><div className="text-2xl font-extrabold mt-1 text-brand">{fmtMoney(project.spent, true)}</div><div className="text-xs text-muted">{project.budget_pct}% used</div></div>
         <div className="card"><div className="text-xs text-muted uppercase">Remaining</div><div className="text-2xl font-extrabold mt-1 text-green">{fmtMoney(project.remaining, true)}</div></div>
         <div className="card"><div className="text-xs text-muted uppercase">Progress</div><div className="text-2xl font-extrabold mt-1">{project.progress}%</div><div className="text-xs text-muted">{project.phase}</div></div>
       </div>
@@ -92,7 +92,7 @@ export default function ProjectDetail() {
         {tabs.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={cx('px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors',
-              tab === t.key ? 'border-gold text-gold' : 'border-transparent text-muted hover:text-text')}>
+              tab === t.key ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-text')}>
             {t.label}
           </button>
         ))}
@@ -130,7 +130,7 @@ export default function ProjectDetail() {
           <div className="space-y-2">
             {project.todos.map((t) => (
               <div key={t.id} className="card flex items-center gap-3 py-3">
-                <button onClick={() => toggleTodo(t.id)} className="text-gold shrink-0">
+                <button onClick={() => toggleTodo(t.id)} className="text-brand shrink-0">
                   {t.status === 'done' ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-muted" />}
                 </button>
                 <div className="flex-1 min-w-0">
@@ -152,7 +152,7 @@ export default function ProjectDetail() {
       {tab === 'logs' && (
         <div>
           <div className="card mb-4">
-            <h3 className="font-bold mb-3 flex items-center gap-2"><Hammer className="w-4 h-4 text-gold" /> Add Daily Log</h3>
+            <h3 className="font-bold mb-3 flex items-center gap-2"><Hammer className="w-4 h-4 text-brand" /> Add Daily Log</h3>
             <textarea className="input min-h-[80px] mb-3" placeholder="What happened on site today?" value={logText} onChange={(e) => setLogText(e.target.value)} />
             <button className="btn btn-primary" onClick={addLog}><Plus className="w-4 h-4" /> Add Entry</button>
           </div>
@@ -175,7 +175,7 @@ export default function ProjectDetail() {
         <div className="space-y-2">
           {project.subs.map((s) => (
             <div key={s.id} className="card flex items-center gap-3 py-3">
-              <div className="w-9 h-9 rounded-lg bg-gold/15 text-gold flex items-center justify-center shrink-0"><Users className="w-4 h-4" /></div>
+              <div className="w-9 h-9 rounded-lg bg-brand/15 text-brand flex items-center justify-center shrink-0"><Users className="w-4 h-4" /></div>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold">{s.name}</div>
                 <div className="text-xs text-muted">{s.email}</div>

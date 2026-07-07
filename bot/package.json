@@ -1,0 +1,19 @@
+{
+  "name": "hermes-os",
+  "version": "1.0.0",
+  "description": "GreenTouch.Pro — Construction Accountability Operating System",
+  "type": "module",
+  "scripts": {
+    "start": "node src/telegram/start-hermes.js",
+    "dev": "node --watch src/telegram/start-hermes.js",
+    "db:init": "node src/db/migrate.js",
+    "email:test": "node src/email/test.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "better-sqlite3": "^11.3.0",
+    "nodemailer": "^6.9.0",
+    "nanoid": "^5.0.7",
+    "pg": "^8.22.0"
+  }
+}

@@ -23,7 +23,7 @@ export default function Projects() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {projects.map((p) => (
           <div key={p.id} onClick={() => navigate(`/project/${p.id}`)}
-            className="card hover:border-gold/40 cursor-pointer transition-all group">
+            className="card hover:border-brand/40 cursor-pointer transition-all group">
             <div className="flex items-start justify-between mb-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-1">
@@ -35,7 +35,7 @@ export default function Projects() {
                   <MapPin className="w-3.5 h-3.5" />{p.address}
                 </div>
               </div>
-              <ChevronRight className="w-5 h-5 text-muted group-hover:text-gold transition-colors shrink-0" />
+              <ChevronRight className="w-5 h-5 text-muted group-hover:text-brand transition-colors shrink-0" />
             </div>
 
             <div className="grid grid-cols-3 gap-3 mb-3 text-center">
@@ -45,7 +45,7 @@ export default function Projects() {
               </div>
               <div>
                 <div className="text-xs text-muted">Spent</div>
-                <div className="font-bold text-sm text-gold">{fmtMoney(p.spent, true)}</div>
+                <div className="font-bold text-sm text-brand">{fmtMoney(p.spent, true)}</div>
               </div>
               <div>
                 <div className="text-xs text-muted">Sq Ft</div>
@@ -59,7 +59,7 @@ export default function Projects() {
                 <span>{p.progress}%</span>
               </div>
               <div className="h-2 bg-border rounded-full overflow-hidden">
-                <div className="h-full bg-gold rounded-full transition-all" style={{ width: `${p.progress}%` }} />
+                <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${p.progress}%` }} />
               </div>
             </div>
           </div>

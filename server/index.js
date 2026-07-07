@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import { nanoid } from 'nanoid';
 import db, { initSchema, seed } from './db.js';
 import { llmEnabled, llmStatus, buildContext, llmChat, ruleBasedRespond } from './llm.js';
+import { startPolling } from './telegram-router.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -67,7 +68,6 @@ app.get('/api/auth/me', auth, (req, res) => {
 app.get('/api/dashboard', auth, (req, res) => {
   const projects = db.prepare('SELECT * FROM projects').all();
   const invoices = db.prepare('SELECT * FROM invoices').all();
-  const leads = db.prepare('SELECT * FROM leads').all();
   const totalBudget = projects.reduce((s, p) => s + p.budget, 0);
   const totalSpent = projects.reduce((s, p) => s + p.spent, 0);
   const health = {};
@@ -89,12 +89,6 @@ app.get('/api/dashboard', auth, (req, res) => {
       pending: invoices.filter(i => i.status === 'sent').reduce((s, i) => s + i.amount, 0),
       budget_util: totalBudget ? +(totalSpent / totalBudget * 100).toFixed(1) : 0,
     },
-    leads: {
-      total: leads.length,
-      hot: leads.filter(l => l.status === 'hot').length,
-      warm: leads.filter(l => l.status === 'warm').length,
-      new: leads.filter(l => l.status === 'new').length,
-    },
     health_scores: health,
     stats: {
       notifications: db.prepare('SELECT COUNT(*) c FROM notifications').get().c,
@@ -106,15 +100,18 @@ app.get('/api/dashboard', auth, (req, res) => {
 
 // ─── Projects ──────────────────────────────────────────────────
 function hydrateProject(p) {
+  const safeQuery = (sql, ...params) => {
+    try { return db.prepare(sql).all(...params); } catch { return []; }
+  };
   return {
     ...p,
     budget_pct: p.budget ? +(p.spent / p.budget * 100).toFixed(1) : 0,
     remaining: p.budget - p.spent,
-    daily_logs: db.prepare('SELECT * FROM daily_logs WHERE project_id = ? ORDER BY date DESC').all(p.id),
-    documents: db.prepare('SELECT * FROM documents WHERE project_id = ?').all(p.id),
-    subs: db.prepare('SELECT * FROM subs WHERE project_id = ?').all(p.id),
-    invoices: db.prepare('SELECT * FROM invoices WHERE project_id = ?').all(p.id),
-    todos: db.prepare('SELECT * FROM todos WHERE project_id = ? ORDER BY priority').all(p.id),
+    daily_logs: safeQuery('SELECT * FROM daily_logs WHERE project_id = ? ORDER BY date DESC', p.id),
+    documents: safeQuery('SELECT * FROM documents WHERE project_id = ?', p.id),
+    subs: safeQuery('SELECT * FROM subs WHERE project_id = ?', p.id),
+    invoices: safeQuery('SELECT * FROM invoices WHERE project_id = ?', p.id),
+    todos: safeQuery('SELECT * FROM todos WHERE project_id = ? ORDER BY priority', p.id),
   };
 }
 
@@ -187,35 +184,6 @@ app.post('/api/todos/:id/toggle', auth, (req, res) => {
 app.delete('/api/todos/:id', auth, (req, res) => {
   db.prepare('DELETE FROM todos WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
-});
-
-// ─── Leads ─────────────────────────────────────────────────────
-app.get('/api/leads', auth, (req, res) => {
-  res.json(db.prepare('SELECT * FROM leads ORDER BY date DESC').all());
-});
-
-// Public lead capture (no auth) — for website forms
-app.post('/api/leads', (req, res) => {
-  const b = req.body || {};
-  const id = 'LD-' + nanoid(6).toUpperCase();
-  db.prepare(`INSERT INTO leads (id,name,company,phone,email,project_desc,sqft,status,date,notes,source)
-    VALUES (?,?,?,?,?,?,?,?,date('now'),?,?)`).run(
-    id, b.name || '', b.company || '', b.phone || '', b.email || '',
-    b.project_desc || b.project || '', b.sqft || 0, 'new', b.notes || '', b.source || 'website'
-  );
-  db.prepare(`INSERT INTO notifications (id,project_id,channel,message) VALUES (?,?,?,?)`)
-    .run(nanoid(8), 'ALL', 'telegram', `🆕 New lead: ${b.name || 'Unknown'} from ${b.company || 'N/A'}`);
-  res.json({ id, status: 'captured' });
-});
-
-app.patch('/api/leads/:id', auth, (req, res) => {
-  const allowed = ['name','company','phone','email','project_desc','sqft','status','notes','source'];
-  const updates = Object.entries(req.body || {}).filter(([k]) => allowed.includes(k));
-  if (updates.length) {
-    const setClause = updates.map(([k]) => `${k} = ?`).join(', ');
-    db.prepare(`UPDATE leads SET ${setClause} WHERE id = ?`).run(...updates.map(([, v]) => v), req.params.id);
-  }
-  res.json(db.prepare('SELECT * FROM leads WHERE id = ?').get(req.params.id));
 });
 
 // ─── Invoices ──────────────────────────────────────────────────
@@ -332,23 +300,358 @@ app.get('/api/users', auth, ownerOnly, (req, res) => {
   res.json(db.prepare('SELECT id,email,name,role,company FROM users').all());
 });
 
+app.patch('/api/users/:id/role', auth, ownerOnly, (req, res) => {
+  const { role } = req.body || {};
+  if (!['owner','exec','foreman','sub'].includes(role)) {
+    return res.status(400).json({ error: 'invalid role — use owner|exec|foreman|sub' });
+  }
+  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'not found' });
+  db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, req.params.id);
+  res.json(db.prepare('SELECT id,email,name,role,company FROM users WHERE id = ?').get(req.params.id));
+});
+
 app.get('/api/stats', auth, (req, res) => {
-  const tables = ['projects','leads','invoices','daily_logs','documents','notifications','ai_chat','transactions','subs','todos','users'];
+  const tables = ['projects','invoices','daily_logs','documents','notifications','ai_chat','transactions','subs','todos','users'];
   const stats = {};
   for (const t of tables) stats[t] = db.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c;
   res.json(stats);
 });
 
+// ─── Shared Construction Data (Postgres via Supabase) ──────
+import pg from 'pg';
+const supabasePool = new pg.Pool({
+  connectionString: process.env.SUPABASE_DB_URL,
+  ssl: { rejectUnauthorized: false },
+  max: 5,
+  idleTimeoutMillis: 30000,
+});
+// Test connection at startup
+supabasePool.query('SELECT 1').then(() => console.log('📦 Supabase Postgres connected')).catch(e => console.error('Supabase connection error:', e.message));
+
+// Convenience: run a query against the shared DB
+async function hdb(sql, params = []) {
+  const r = await supabasePool.query(sql, params);
+  return r.rows;
+}
+async function hdbOne(sql, params = []) {
+  const r = await supabasePool.query(sql, params);
+  return r.rows[0] || null;
+}
+
+app.get('/api/cos', auth, async (req, res) => {
+  try {
+    const { project } = req.query;
+    const rows = project
+      ? await hdb('SELECT * FROM change_orders WHERE project LIKE $1 ORDER BY created_at DESC', [`%${project}%`])
+      : await hdb('SELECT * FROM change_orders ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/inspections', auth, async (req, res) => {
+  try {
+    const { project } = req.query;
+    const rows = project
+      ? await hdb('SELECT * FROM inspections WHERE project LIKE $1 ORDER BY scheduled_date ASC', [`%${project}%`])
+      : await hdb('SELECT * FROM inspections ORDER BY scheduled_date ASC');
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/permits', auth, async (req, res) => {
+  try {
+    const { project } = req.query;
+    const rows = project
+      ? await hdb('SELECT * FROM permits WHERE project LIKE $1 ORDER BY expiration_date ASC', [`%${project}%`])
+      : await hdb('SELECT * FROM permits ORDER BY expiration_date ASC');
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/liens', auth, async (req, res) => {
+  try {
+    const { project } = req.query;
+    const rows = project
+      ? await hdb('SELECT * FROM lien_releases WHERE project LIKE $1 ORDER BY created_at DESC', [`%${project}%`])
+      : await hdb('SELECT * FROM lien_releases ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/photos', auth, async (req, res) => {
+  try {
+    const { project } = req.query;
+    const rows = project
+      ? await hdb('SELECT * FROM project_photos WHERE project LIKE $1 ORDER BY created_at DESC LIMIT 50', [`%${project}%`])
+      : await hdb('SELECT * FROM project_photos ORDER BY created_at DESC LIMIT 50');
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/crew', auth, async (req, res) => {
+  try {
+    const rows = await hdb('SELECT * FROM time_entries WHERE clock_in::date = CURRENT_DATE ORDER BY clock_in DESC');
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── INTERACTIVE WRITE ENDPOINTS (shared hermes.db — mirrors the bot) ──
+// These let Graham manage everything from the web app, not just the bot.
+const hid = (p) => `${p}_${nanoid(10)}`;
+
+// Change Orders — create + approve/reject
+app.post('/api/cos', auth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.project || !b.description) return res.status(400).json({ error: 'project and description required' });
+    const id = hid('co');
+    await hdb(`INSERT INTO change_orders (id, project, description, cost, requested_by, status, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
+      [id, b.project, b.description, Number(b.cost) || 0, b.requested_by || req.user?.email || 'Dashboard', b.status || 'pending']);
+    res.json(await hdbOne('SELECT * FROM change_orders WHERE id = $1', [id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.patch('/api/cos/:id', auth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const co = await hdbOne('SELECT * FROM change_orders WHERE id = $1', [req.params.id]);
+    if (!co) return res.status(404).json({ error: 'not found' });
+    const status = b.status || co.status;
+    await hdb(`UPDATE change_orders SET status=$1, approved_by=$2, description=$3, cost=$4 WHERE id=$5`,
+      [status, b.approved_by || (status === 'approved' ? (req.user?.email || 'Dashboard') : co.approved_by),
+       b.description || co.description, b.cost != null ? Number(b.cost) : co.cost, req.params.id]);
+    res.json(await hdbOne('SELECT * FROM change_orders WHERE id = $1', [req.params.id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Punch List — create + toggle done
+app.get('/api/punch', auth, async (req, res) => {
+  try {
+    const { project } = req.query;
+    const rows = project
+      ? await hdb('SELECT * FROM punchlist WHERE project LIKE $1 ORDER BY created_at DESC', [`%${project}%`])
+      : await hdb('SELECT * FROM punchlist ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/punch', auth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const item = b.item || b.description;
+    if (!b.project || !item) return res.status(400).json({ error: 'project and item required' });
+    const id = hid('pl');
+    await hdb(`INSERT INTO punchlist (id, project, location, item, assignee, status, priority, created_by, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())`,
+      [id, b.project, b.location || '', item, b.assignee || '', 'open', b.priority || 'medium', req.user?.email || 'Dashboard']);
+    res.json(await hdbOne('SELECT * FROM punchlist WHERE id = $1', [id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/punch/:id/toggle', auth, async (req, res) => {
+  try {
+    const t = await hdbOne('SELECT * FROM punchlist WHERE id = $1', [req.params.id]);
+    if (!t) return res.status(404).json({ error: 'not found' });
+    const status = t.status === 'open' ? 'done' : 'open';
+    await hdb('UPDATE punchlist SET status = $1 WHERE id = $2', [status, req.params.id]);
+    res.json({ id: req.params.id, status });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Inspections — schedule + update result
+app.post('/api/inspections', auth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.project || !b.type) return res.status(400).json({ error: 'project and type required' });
+    const id = hid('insp');
+    await hdb(`INSERT INTO inspections (id, project, type, inspector, scheduled_date, status, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
+      [id, b.project, b.type, b.inspector || '', b.scheduled_date || '', b.status || 'scheduled']);
+    res.json(await hdbOne('SELECT * FROM inspections WHERE id = $1', [id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.patch('/api/inspections/:id', auth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const row = await hdbOne('SELECT * FROM inspections WHERE id = $1', [req.params.id]);
+    if (!row) return res.status(404).json({ error: 'not found' });
+    await hdb(`UPDATE inspections SET status=$1, scheduled_date=$2, inspector=$3 WHERE id=$4`,
+      [b.status || row.status, b.scheduled_date || row.scheduled_date, b.inspector || row.inspector, req.params.id]);
+    res.json(await hdbOne('SELECT * FROM inspections WHERE id = $1', [req.params.id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Assignments (tasks) — read + create + complete
+app.get('/api/assignments', auth, async (req, res) => {
+  try {
+    const { project } = req.query;
+    const rows = project
+      ? await hdb('SELECT * FROM assignments WHERE project LIKE $1 ORDER BY created_at DESC', [`%${project}%`])
+      : await hdb('SELECT * FROM assignments ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/assignments', auth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.task) return res.status(400).json({ error: 'task required' });
+    const id = hid('h');
+    await hdb(`INSERT INTO assignments (id, project, task, assignee, assigned_by, status, due_date, notes, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())`,
+      [id, b.project || 'General', b.task, b.assignee || 'Unassigned',
+       req.user?.email || 'Dashboard', 'assigned', b.due_date || null, b.notes || '']);
+    res.json(await hdbOne('SELECT * FROM assignments WHERE id = $1', [id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/assignments/:id/complete', auth, async (req, res) => {
+  try {
+    const t = await hdbOne('SELECT * FROM assignments WHERE id = $1', [req.params.id]);
+    if (!t) return res.status(404).json({ error: 'not found' });
+    const status = t.status === 'completed' ? 'assigned' : 'completed';
+    await hdb('UPDATE assignments SET status = $1 WHERE id = $2', [status, req.params.id]);
+    res.json({ id: req.params.id, status });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Permits — create
+app.post('/api/permits', auth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.project || !b.type) return res.status(400).json({ error: 'project and type required' });
+    const id = hid('prm');
+    await hdb(`INSERT INTO permits (id, project, type, jurisdiction, permit_number, status, issued_date, expiration_date, fee, notes, created_by, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())`,
+      [id, b.project, b.type, b.jurisdiction || b.issuing_authority || '', b.permit_number || '',
+       b.status || 'active', b.issued_date || '', b.expiration_date || '', Number(b.fee) || 0, b.notes || '', req.user?.email || 'Dashboard']);
+    res.json(await hdbOne('SELECT * FROM permits WHERE id = $1', [id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Generic resource layer (full bot parity) ────────────────────
+import { registerResourceRoutes } from './resources.js';
+let managedTables = [];
+registerResourceRoutes(app, supabasePool, auth).then(tables => {
+  managedTables = tables;
+  console.log(`📋 Resource API live for ${managedTables.length} bot domains: ${managedTables.join(', ')}`);
+});
+
+// ─── Specialized bot actions (state transitions the bot performs) ──
+const nowISO = () => new Date().toISOString();
+
+// Instead of SQLite PRAGMA, use information_schema
+async function hasTable(t) {
+  try { const r = await supabasePool.query(`SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1`, [t]); return r.rows.length > 0; } catch { return false; }
+}
+async function cols(t) {
+  try { const r = await supabasePool.query(`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1`, [t]); return r.rows.map(c => c.column_name); } catch { return []; }
+}
+
+// Crew clock in / out  (bot: /clockin /clockout /onsite)
+app.post('/api/crew/clockin', auth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.worker && !b.name) return res.status(400).json({ error: 'worker required' });
+    const id = `te_${nanoid(10)}`;
+    const c = await cols('time_entries');
+    const worker = b.worker || b.name || b.worker_name;
+    const data = { id };
+    if (c.includes('worker_name')) data.worker_name = worker;
+    if (c.includes('worker')) data.worker = worker;
+    if (c.includes('name')) data.name = worker;
+    if (c.includes('trade')) data.trade = b.trade || '';
+    if (c.includes('project')) data.project = b.project || 'General';
+    if (c.includes('clock_in')) data.clock_in = nowISO();
+    if (c.includes('created_at')) data.created_at = nowISO();
+    if (c.includes('status')) data.status = 'on_site';
+    const keys = Object.keys(data);
+    const sql = `INSERT INTO time_entries (${keys.map(k=>`"${k}"`).join(',')}) VALUES (${keys.map((_,i)=>`$${i+1}`).join(',')})`;
+    await hdb(sql, keys.map(k=>data[k]));
+    res.json(await hdbOne('SELECT * FROM time_entries WHERE id = $1', [id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/crew/:id/clockout', auth, async (req, res) => {
+  try {
+    const row = await hdbOne('SELECT * FROM time_entries WHERE id = $1', [req.params.id]);
+    if (!row) return res.status(404).json({ error: 'not found' });
+    const c = await cols('time_entries');
+    if (c.includes('clock_out')) await hdb('UPDATE time_entries SET clock_out = $1 WHERE id = $2', [nowISO(), req.params.id]);
+    if (c.includes('status')) await hdb('UPDATE time_entries SET status = $1 WHERE id = $2', ['clocked_out', req.params.id]);
+    res.json(await hdbOne('SELECT * FROM time_entries WHERE id = $1', [req.params.id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Generic status-transition action
+app.post('/api/action/:table/:id', auth, async (req, res) => {
+  const allowed = ['rfis','submittals','blockers','lien_releases','permits','change_orders','deliveries','inspections'];
+  const { table, id } = req.params;
+  if (!allowed.includes(table)) return res.status(404).json({ error: 'unknown action target' });
+  try {
+    const c = await cols(table);
+    const row = await hdbOne(`SELECT * FROM "${table}" WHERE id = $1`, [id]);
+    if (!row) return res.status(404).json({ error: 'not found' });
+    const b = req.body || {};
+    const sets = [], args = [];
+    let pi = 1;
+    if (b.status && c.includes('status')) { sets.push(`status = $${pi++}`); args.push(b.status); }
+    const who = b.by || req.user?.email || 'Dashboard';
+    for (const col of ['resolved_by','approved_by','signed_by','closed_by','answered_by']) {
+      if (c.includes(col)) { sets.push(`${col} = $${pi++}`); args.push(who); break; }
+    }
+    for (const col of ['resolved_at','approved_at','signed_at','closed_at','answered_at','updated_at']) {
+      if (c.includes(col)) { sets.push(`${col} = $${pi++}`); args.push(nowISO()); break; }
+    }
+    if (b.response && c.includes('response')) { sets.push(`response = $${pi++}`); args.push(b.response); }
+    if (b.notes && c.includes('notes')) { sets.push(`notes = $${pi++}`); args.push(b.notes); }
+    if (!sets.length) return res.json(row);
+    await hdb(`UPDATE "${table}" SET ${sets.join(', ')} WHERE id = $${pi}`, [...args, id]);
+    res.json(await hdbOne(`SELECT * FROM "${table}" WHERE id = $1`, [id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── Serve built frontend (single-container/Docker deploy) ─────
+import compression from 'compression';
 const PUBLIC_DIR = fs.existsSync(path.join(__dirname, 'public'))
   ? path.join(__dirname, 'public')
   : path.join(__dirname, '..', 'dist');
 if (fs.existsSync(PUBLIC_DIR)) {
-  app.use(express.static(PUBLIC_DIR));
+  // Gzip/brotli compression for text assets
+  app.use(compression());
+
+  // Immutable cache for content-hashed assets (fingerprinted JS/CSS/images)
+  app.use('/assets', (req, res, next) => {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    next();
+  }, express.static(path.join(PUBLIC_DIR, 'assets')));
+
+  // Other static files (favicon, manifest, etc.) — 1 day cache
+  app.use(express.static(PUBLIC_DIR, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) {
+        // No cache for HTML — always fresh
+        res.setHeader('Cache-Control', 'no-cache');
+      } else if (!filePath.includes('/assets/')) {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+      }
+    }
+  }));
+
   // SPA fallback — non-API routes return index.html
   app.get(/^(?!\/api).*/, (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
   });
 }
 
-app.listen(PORT, () => console.log(`🏗️  Green Touch Pro API running on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🏗️  Green Touch Pro API running on http://localhost:${PORT}`);
+  // Start Hermes Telegram bot polling (Agent 6)
+  if (process.env.TELEGRAM_TOKEN) {
+    startPolling().catch(e => console.error('Hermes polling failed:', e.message));
+  }
+});

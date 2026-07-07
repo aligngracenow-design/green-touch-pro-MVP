@@ -39,7 +39,7 @@ export default function Invoicing() {
       <PageHeader title="Invoicing" subtitle="Billing, payments & collections" />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <StatCard label="Total Invoiced" value={fmtMoney(total, true)} accent="text-gold" />
+        <StatCard label="Total Invoiced" value={fmtMoney(total, true)} accent="text-brand" />
         <StatCard label="Collected" value={fmtMoney(paid, true)} accent="text-green" />
         <StatCard label="Outstanding" value={fmtMoney(outstanding, true)} accent="text-amber" />
       </div>

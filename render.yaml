@@ -1,17 +1,51 @@
-# Render.com blueprint — provisions the Green Touch Pro backend API.
-# Deploy: connect this repo at https://render.com and it auto-detects this file.
+# GreenTouch.pro — Render blueprint (single service, persistent data)
+# Deploy: push to GitHub, then at https://render.com → New → Blueprint,
+# pick this repo. Render reads this file and provisions everything.
+#
+# WHY Docker + disk: the bot and dashboard share ONE SQLite database.
+# The persistent disk keeps that database (and its backups) across every
+# deploy and restart — this is your single archived source of truth.
 services:
   - type: web
-    name: green-touch-pro-api
-    runtime: node
-    rootDir: server
-    plan: free
-    buildCommand: npm install
-    startCommand: npm start
+    name: greentouch-pro
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter                 # $7/mo — REQUIRED for the persistent disk
+    healthCheckPath: /
+    autoDeploy: true
+    disk:
+      name: greentouch-data
+      mountPath: /data            # hermes.db + backups live here, survive deploys
+      sizeGB: 1
     envVars:
-      - key: JWT_SECRET
-        generateValue: true
-      - key: CORS_ORIGINS
-        value: "*"
       - key: PORT
         value: "4000"
+      - key: DATA_DIR
+        value: /data
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true       # Render generates a strong secret
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: DASHBOARD_URL
+        value: https://app.greentouch.pro
+      # --- Secrets you paste in the Render dashboard (marked sync:false) ---
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENROUTER_KEY
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: LEADERSHIP_EMAILS
+        sync: false

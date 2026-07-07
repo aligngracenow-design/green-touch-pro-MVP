@@ -1,6 +1,6 @@
-import type { Project, Lead, Invoice, Notification, DashboardData, User, ChatMessage, Todo } from './types';
+import type { Project, Invoice, Notification, DashboardData, User, ChatMessage, Todo } from './types';
 import {
-  MOCK_USER, MOCK_PROJECTS, MOCK_INVOICES, MOCK_LEADS, MOCK_NOTIFICATIONS,
+  MOCK_USER, MOCK_PROJECTS, MOCK_INVOICES, MOCK_NOTIFICATIONS,
   buildMockDashboard, mockAiRespond,
 } from './mockData';
 
@@ -168,25 +168,6 @@ export const api = {
     await request(`/projects/${projectId}/logs`, { method: 'POST', body: JSON.stringify({ text }) });
   },
 
-  // ─── Leads ───
-  async leads(): Promise<Lead[]> {
-    if (MOCK_MODE) {
-      await delay();
-      return MOCK_LEADS;
-    }
-    return request<Lead[]>('/leads');
-  },
-
-  async updateLead(id: string, field: string, value: string): Promise<void> {
-    if (MOCK_MODE) {
-      await delay(120);
-      const l = MOCK_LEADS.find((x) => x.id === id) as Record<string, unknown> | undefined;
-      if (l) l[field] = value;
-      return;
-    }
-    await request(`/leads/${id}`, { method: 'PATCH', body: JSON.stringify({ [field]: value }) });
-  },
-
   // ─── Invoices ───
   async invoices(): Promise<Invoice[]> {
     if (MOCK_MODE) {
@@ -281,11 +262,52 @@ export const api = {
     return request<User[]>('/users');
   },
 
+  async changeRole(userId: string, role: string): Promise<User> {
+    return request<User>(`/users/${userId}/role`, { method: 'PATCH', body: JSON.stringify({ role }) });
+  },
+
   async stats(): Promise<Record<string, number>> {
     if (MOCK_MODE) {
       await delay(100);
-      return { projects: 5, leads: 5, invoices: 5, daily_logs: 9, documents: 4, notifications: 3, ai_chat: 0, transactions: 1, subs: 9, todos: 5, users: 2 };
+      return { projects: 5, invoices: 5, daily_logs: 9, documents: 4, notifications: 3, ai_chat: 0, transactions: 1, subs: 9, todos: 5, users: 2 };
     }
     return request<Record<string, number>>('/stats');
+  },
+
+  // ─── Hermes shared-data endpoints (bot ↔ dashboard) ───
+  async cos(): Promise<any[]> { return request('/cos'); },
+  async inspections(): Promise<any[]> { return request('/inspections'); },
+  async permits(): Promise<any[]> { return request('/permits'); },
+  async liens(): Promise<any[]> { return request('/liens'); },
+  async photos(): Promise<any[]> { return request('/photos'); },
+  async crew(): Promise<any[]> { return request('/crew'); },
+
+  // ─── Generic resource layer (full bot parity) ───
+  // list/get/create/update/delete + status actions for every bot domain.
+  async list(table: string, params?: Record<string, string>): Promise<any[]> {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return request(`/r/${table}${qs}`);
+  },
+  async getOne(table: string, id: string): Promise<any> { return request(`/r/${table}/${id}`); },
+  async create(table: string, body: Record<string, unknown>): Promise<any> {
+    return request(`/r/${table}`, { method: 'POST', body: JSON.stringify(body) });
+  },
+  async update(table: string, id: string, body: Record<string, unknown>): Promise<any> {
+    return request(`/r/${table}/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+  },
+  async remove(table: string, id: string): Promise<any> {
+    return request(`/r/${table}/${id}`, { method: 'DELETE' });
+  },
+  async action(table: string, id: string, body: Record<string, unknown>): Promise<any> {
+    return request(`/action/${table}/${id}`, { method: 'POST', body: JSON.stringify(body) });
+  },
+  async schema(table: string): Promise<{ name: string; type: string; pk: boolean; notnull: boolean }[]> {
+    return request(`/schema/${table}`);
+  },
+  async clockIn(body: Record<string, unknown>): Promise<any> {
+    return request('/crew/clockin', { method: 'POST', body: JSON.stringify(body) });
+  },
+  async clockOut(id: string): Promise<any> {
+    return request(`/crew/${id}/clockout`, { method: 'POST', body: '{}' });
   },
 };

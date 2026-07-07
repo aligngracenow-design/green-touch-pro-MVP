@@ -1,0 +1,13 @@
+node_modules
+bot/node_modules
+server/node_modules
+dist
+persist
+.git
+*.log
+bot/.venv-scripts
+bot/.venv-whisper
+bot/data/backups
+bot/data/_orphaned
+bot/content
+bot/.hermes

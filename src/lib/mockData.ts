@@ -1,4 +1,4 @@
-import type { Project, Lead, Invoice, Notification, DashboardData, User } from './types';
+import type { Project, Invoice, Notification, DashboardData, User, ChatMessage, Todo } from './types';
 
 export const MOCK_USER: User = {
   id: 'user-graham',
@@ -111,14 +111,6 @@ export const MOCK_INVOICES: Invoice[] = [
   { id: 'INV-2024-005', project_id: 'GTB-2024-005', amount: 35000, status: 'draft', due_date: '2024-07-15', paid_date: null, created_at: '2024-06-14', client_name: 'Serotonin Med Spa', client_email: 'billing@serotoninmed.com', description: 'Preconstruction consulting retainer' },
 ];
 
-export const MOCK_LEADS: Lead[] = [
-  { id: 'LD-001', name: 'Michael Miller', company: 'Cyxtera Technologies', phone: '(703) 555-0142', email: 'mmiller@cyxtera.com', project_desc: 'Data center office renovation — 8,000 sq ft', sqft: 8000, status: 'hot', date: '2024-06-08', notes: 'Existing client. Needs quick turnaround on RFP.', source: 'referral' },
-  { id: 'LD-002', name: 'Sarah Chen', company: 'Bloom Yoga Studio', phone: '(571) 555-0189', email: 'sarah@bloomyoga.com', project_desc: 'New yoga studio buildout — Reston', sqft: 3200, status: 'warm', date: '2024-06-07', notes: 'Looking at 3 spaces. Needs budget range by Friday.', source: 'website' },
-  { id: 'LD-003', name: 'James Wilson', company: 'Wilson Dental Group', phone: '(202) 555-0223', email: 'jwilson@wilsondental.com', project_desc: 'Dental office expansion — 1,500 sq ft', sqft: 1500, status: 'new', date: '2024-06-10', notes: 'Referred by M&T Bank. Call ASAP for site visit.', source: 'referral' },
-  { id: 'LD-004', name: 'Lisa Park', company: 'CorePower Yoga', phone: '(703) 555-0345', email: 'lisa@corepower.com', project_desc: 'New studio — 3,500 sq ft, Tysons Corner', sqft: 3500, status: 'warm', date: '2024-06-12', notes: 'National account. Submit as preferred vendor.', source: 'rfi' },
-  { id: 'LD-005', name: 'Tom Richards', company: 'Bold Fork Restaurant', phone: '(202) 555-0456', email: 'tom@boldfork.com', project_desc: 'Full restaurant buildout — 2,800 sq ft', sqft: 2800, status: 'new', date: '2024-06-14', notes: 'Smith Group referred. Fire suppression needed.', source: 'referral' },
-];
-
 export const MOCK_NOTIFICATIONS: Notification[] = [
   { id: 'n1', project_id: 'GTB-2024-002', channel: 'telegram', message: '📄 Invoice INV-2024-002 for $150,000 sent to accounts@blacksquirrel.com', sent_at: '2024-06-14 09:12', status: 'sent' },
   { id: 'n2', project_id: 'ALL', channel: 'email', message: '🆕 New lead: Tom Richards from Bold Fork Restaurant', sent_at: '2024-06-14 08:40', status: 'sent' },
@@ -148,12 +140,6 @@ export function buildMockDashboard(): DashboardData {
       paid: MOCK_INVOICES.filter((i) => i.status === 'paid').reduce((s, i) => s + i.amount, 0),
       pending: MOCK_INVOICES.filter((i) => i.status === 'sent').reduce((s, i) => s + i.amount, 0),
       budget_util: +(totalSpent / totalBudget * 100).toFixed(1),
-    },
-    leads: {
-      total: MOCK_LEADS.length,
-      hot: MOCK_LEADS.filter((l) => l.status === 'hot').length,
-      warm: MOCK_LEADS.filter((l) => l.status === 'warm').length,
-      new: MOCK_LEADS.filter((l) => l.status === 'new').length,
     },
     health_scores: health,
     stats: { notifications: MOCK_NOTIFICATIONS.length, ai_chats: 0, invoices: MOCK_INVOICES.length },
