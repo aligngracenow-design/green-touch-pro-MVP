@@ -8,18 +8,29 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import dotenv from 'dotenv';
 
 const execFileP = promisify(execFile);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
 
-// Load .env
-const envFile = path.join(PROJECT_ROOT, '.env');
-fs.readFileSync(envFile, 'utf-8').split('\n').forEach(line => {
-  const [k, ...rest] = line.split('=');
-  if (k && rest.length && !k.startsWith('#')) process.env[k.trim()] = rest.join('=').trim();
-});
+// Load .env — works locally and on Render
+const envPath = process.env.NODE_ENV === 'production'
+  ? path.join('/app', '.env')          // Render: /app/.env
+  : path.join(PROJECT_ROOT, '.env');   // Local: project root
+dotenv.config({ path: envPath });
+
+// Fallback: manual load if dotenv didn't catch it
+if (!process.env.TELEGRAM_TOKEN) {
+  const envFile = path.join(PROJECT_ROOT, '.env');
+  if (fs.existsSync(envFile)) {
+    fs.readFileSync(envFile, 'utf-8').split('\n').forEach(line => {
+      const [k, ...rest] = line.split('=');
+      if (k && rest.length && !k.startsWith('#')) process.env[k.trim()] = rest.join('=').trim();
+    });
+  }
+}
 
 const TELEGRAM = process.env.TELEGRAM_TOKEN;
 const API = `https://api.telegram.org/bot${TELEGRAM}`;
