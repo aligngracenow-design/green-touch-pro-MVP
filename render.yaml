@@ -11,7 +11,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: starter                 # $7/mo — REQUIRED for the persistent disk
-    healthCheckPath: /
+    healthCheckPath: /api/health
     autoDeploy: true
     disk:
       name: greentouch-data
@@ -48,4 +48,6 @@ services:
       - key: SMTP_FROM
         sync: false
       - key: LEADERSHIP_EMAILS
+        sync: false
+      - key: SUPABASE_DB_URL
         sync: false
