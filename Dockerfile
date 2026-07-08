@@ -1,4 +1,4 @@
-# GreenTouch.pro — single production image
+# GreenTouch.pro — single production image (v20260708)
 # Runs the dashboard API + React frontend + Telegram bot together,
 # all against ONE SQLite database on a mounted persistent disk.
 
