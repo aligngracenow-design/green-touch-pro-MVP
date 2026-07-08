@@ -13,14 +13,34 @@ import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Process-level error handlers (prevent crashes from unhandled errors)
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+});
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || '*').split(',').map(s => s.trim());
 
-initSchema();
-const seedResult = seed();
-console.log('DB ready.', seedResult.seeded ? 'Seeded fresh data.' : 'Existing data found.');
+try {
+  initSchema();
+  console.log('Schema initialized.');
+} catch (e) {
+  console.error('Schema init error (non-fatal):', e.message);
+}
+
+let seedResult = { seeded: false };
+try {
+  seedResult = seed();
+  console.log('DB ready.', seedResult.seeded ? 'Seeded fresh data.' : 'Existing data found.');
+} catch (e) {
+  console.error('Seed error (non-fatal):', e.message);
+  console.log('DB ready. Continuing with existing data.');
+}
 
 app.use(cors({ origin: CORS_ORIGINS.includes('*') ? true : CORS_ORIGINS, credentials: true }));
 app.use(express.json());
@@ -646,9 +666,17 @@ if (fs.existsSync(PUBLIC_DIR)) {
     res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
   });
-}
+  }
 
-app.listen(PORT, () => {
+  // Catch-all error handler (prevents crashes from async errors)
+  app.use((err, req, res, next) => {
+    console.error('Server error:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.listen(PORT, () => {
   console.log(`🏗️  Green Touch Pro API running on http://localhost:${PORT}`);
   // Start Hermes Telegram bot polling (Agent 6)
   if (process.env.TELEGRAM_TOKEN) {

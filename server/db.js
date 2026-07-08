@@ -6,7 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'greentouch.db');
+const DB_PATH = process.env.DB_PATH || process.env.HERMES_DB || path.join(__dirname, 'data', 'greentouch.db');
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 

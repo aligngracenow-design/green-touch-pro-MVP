@@ -31,8 +31,8 @@ if (!fs.existsSync(DB_FILE) && fs.existsSync(SEED_DB)) {
 // Shared env: both processes read/write the SAME file on the persistent disk.
 const sharedEnv = {
   ...process.env,
-  DB_PATH: DB_FILE,        // bot reads DB_PATH
-  HERMES_DB: DB_FILE,      // dashboard reads HERMES_DB
+  DB_PATH: DB_FILE,        // both bot and dashboard read DB_PATH
+  HERMES_DB: DB_FILE,      // legacy support
   BACKUP_DIR: path.join(DATA_DIR, 'backups'),
 };
 

@@ -11,7 +11,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = process.env.DB_PATH || path.join(__dirname, 'data', 'greentouch.db');
+const dbPath = process.env.DB_PATH || process.env.HERMES_DB || path.join(__dirname, 'data', 'greentouch.db');
 const db = new Database(dbPath);
 
 const {
